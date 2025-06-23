@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Análise Estrutural de Gancho</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: A aplicação foi estruturada como um dashboard interativo para facilitar a comparação e a análise dos dados. A abordagem "top-down" começa com um resumo visual (gráfico comparativo) e permite ao usuário aprofundar-se nos detalhes de cada cenário sob demanda. Essa estrutura é mais intuitiva que um relatório linear, pois destaca a principal conclusão (falha em todos os cenários) e permite uma exploração não-linear, focada no interesse do usuário. O fluxo é: 1. Visão geral com gráfico e parâmetros chave. 2. Seleção de um cenário de interesse via cartões interativos. 3. Atualização dinâmica de uma seção de detalhes com os resultados específicos do cenário escolhido. 4. Conclusões gerais sempre visíveis no final. -->
+    <!-- Visualization & Content Choices: 1. (Comparar Tensões) -> Gráfico de Barras (Chart.js): Ideal para comparar valores discretos dos 4 testes. Interação: Clicar nas barras filtra os detalhes. Uma linha de anotação (plugin Chart.js) para o "Limite de Escoamento" torna a falha visualmente óbvia. 2. (Detalhes do Cenário) -> Blocos de Conteúdo Dinâmico (HTML/JS): Apresenta dados específicos (deformação, tensão, análise) de forma organizada, atualizando via manipulação do DOM. Evita sobrecarga de informação. 3. (Imagens da Simulação) -> Placeholders Estilizados (HTML/Tailwind): Como imagens não são permitidas, placeholders com texto descritivo representam os resultados visuais da simulação (carga, deformação, tensão) para cada cenário. Justificativa: A combinação de um gráfico interativo com painéis de detalhes dinâmicos oferece a maneira mais eficaz de comunicar os resultados complexos de uma simulação FEA de forma clara e concisa. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f7f4;
+            color: #2c3e50;
+        }
+        .chart-container {
+            position: relative;
+            height: 40vh;
+            max-height: 400px;
+            width: 100%;
+            max-width: 800px;
+            margin: auto;
+        }
+        .scenario-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .scenario-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .scenario-card.selected {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
+            transform: translateY(-2px);
+        }
+        .metric-card {
+            background-color: #ffffff;
+            border-left: 5px solid;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .image-card {
+            background-color: #ffffff;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        .spec-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .spec-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .spec-table tr:last-child td {
+            border-bottom: none;
+        }
+        .spec-table td:first-child {
+            font-weight: 500;
+            color: #4b5563;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="container mx-auto p-4 md:p-8">
+        
+        <header class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">Análise Interativa de Gancho de Içamento</h1>
+            <p class="text-lg text-gray-600 mt-2">Dashboard de resultados da Análise de Elementos Finitos (FEA)</p>
+        </header>
+
+        <main>
+            <section id="summary" class="mb-12 bg-white p-6 rounded-lg shadow-sm">
+                <h2 class="text-2xl font-bold text-gray-700 mb-4 border-b pb-2">Resumo da Análise</h2>
+                <div class="grid md:grid-cols-2 gap-8">
+                    <div>
+                        <p class="text-gray-700 leading-relaxed">
+                            Este dashboard apresenta os resultados de uma análise estrutural estática em um gancho de içamento. O estudo avaliou o comportamento do componente sob uma carga de <strong>75 kN</strong>, aplicada em quatro cenários distintos para identificar os pontos de maior tensão e deformação. A análise critica os resultados comparando-os com o limite de escoamento do material.
+                        </p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 text-center">
+                        <div class="bg-blue-50 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-blue-800">Carga Aplicada</h3>
+                            <p class="text-3xl font-bold text-blue-600">75 kN</p>
+                        </div>
+                        <div class="bg-red-50 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-red-800">Limite de Escoamento</h3>
+                            <p class="text-3xl font-bold text-red-600">0.25 GPa</p>
+                            <span class="text-sm text-red-500">(Tensão Máxima Segura)</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="setup" class="mb-12">
+                <h2 class="text-2xl font-bold text-gray-700 mb-6 text-center">Condições de Contorno e Material</h2>
+                <div class="grid md:grid-cols-5 gap-8 bg-white p-6 rounded-lg shadow-sm">
+                    <div class="md:col-span-2">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-3">Engaste (Fixed Support)</h3>
+                        <p class="text-gray-600 mb-4">A simulação restringiu todos os graus de liberdade na área do olhal para representar a conexão fixa do gancho.</p>
+                        <div class="image-card">
+                             <img src="https://i.imgur.com/np6FrXR.png" alt="Imagem do local de engaste do gancho" class="w-full h-auto object-cover">
+                        </div>
+                    </div>
+                    <div class="md:col-span-3">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-3">Propriedades do Material (Aço Estrutural)</h3>
+                         <div class="overflow-x-auto rounded-lg border">
+                            <table class="spec-table">
+                                <tbody>
+                                    <tr class="bg-gray-50">
+                                        <td>Módulo de Young</td>
+                                        <td>200,00 GPa</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Coeficiente de Poisson</td>
+                                        <td>0,30</td>
+                                    </tr>
+                                    <tr class="bg-gray-50">
+                                        <td>Tensão de Escoamento</td>
+                                        <td>0,2500 GPa</td>
+                                    </tr>
+                                     <tr>
+                                        <td>Tensão de Ruptura</td>
+                                        <td>0,4600 GPa</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="dashboard" class="mb-12">
+                 <h2 class="text-2xl font-bold text-gray-700 mb-2 text-center">Comparativo de Tensão Máxima por Cenário</h2>
+                 <p class="text-center text-gray-600 mb-6">A linha pontilhada vermelha representa o limite de escoamento do material. Valores acima indicam falha estrutural.</p>
+                <div class="chart-container mb-8">
+                    <canvas id="stressChart"></canvas>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div id="card-1" data-scenario="1" class="scenario-card bg-white p-5 rounded-lg border-2 border-gray-200">
+                        <h3 class="text-xl font-bold text-gray-800">Cenário 1</h3>
+                        <p class="text-gray-600 mt-1">Carga concentrada na base interna.</p>
+                    </div>
+                    <div id="card-2" data-scenario="2" class="scenario-card bg-white p-5 rounded-lg border-2 border-gray-200">
+                        <h3 class="text-xl font-bold text-gray-800">Cenário 2</h3>
+                        <p class="text-gray-600 mt-1">Carga na curvatura principal.</p>
+                    </div>
+                    <div id="card-3" data-scenario="3" class="scenario-card bg-white p-5 rounded-lg border-2 border-gray-200">
+                        <h3 class="text-xl font-bold text-gray-800">Cenário 3</h3>
+                        <p class="text-gray-600 mt-1">Carga deslocada para a ponta.</p>
+                    </div>
+                    <div id="card-4" data-scenario="4" class="scenario-card bg-white p-5 rounded-lg border-2 border-gray-200">
+                        <h3 class="text-xl font-bold text-gray-800">Cenário 4</h3>
+                        <p class="text-gray-600 mt-1">Carga Lateral.</p>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="details" class="bg-white p-6 rounded-lg shadow-sm min-h-[300px]">
+                <div id="details-content" class="fade-in">
+                    <h2 id="details-title" class="text-2xl font-bold text-gray-700 mb-4 border-b pb-2">Selecione um Cenário</h2>
+                    <p id="details-placeholder" class="text-gray-500 text-center py-16">Clique em um dos cartões acima para ver os detalhes do cenário, incluindo deformação, tensão, análise e imagens da simulação.</p>
+                    
+                    <div id="details-body" class="hidden">
+                        <p id="details-description" class="text-lg text-gray-700 mb-6"></p>
+                        <div class="grid md:grid-cols-2 gap-6 mb-8">
+                            <div id="deformation-card" class="metric-card border-blue-500">
+                                <h4 class="text-xl font-semibold text-gray-600 mb-2">Deformação Total Máxima</h4>
+                                <p id="details-deformation" class="text-4xl font-bold text-blue-600"></p>
+                            </div>
+                             <div id="stress-card" class="metric-card border-red-500">
+                                <h4 class="text-xl font-semibold text-gray-600 mb-2">Tensão Máxima (von Mises)</h4>
+                                <p id="details-stress" class="text-4xl font-bold text-red-600"></p>
+                            </div>
+                        </div>
+
+                        <div id="details-images" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                            <div class="image-card">
+                                <img id="img-load" src="" alt="Imagem da aplicação de carga" class="w-full h-auto object-cover bg-gray-200">
+                                <p class="p-3 text-center font-semibold bg-gray-100">Aplicação de Carga</p>
+                            </div>
+                            <div class="image-card">
+                                <img id="img-deformation" src="" alt="Imagem da deformação total" class="w-full h-auto object-cover bg-gray-200">
+                                <p class="p-3 text-center font-semibold bg-gray-100">Deformação Total</p>
+                            </div>
+                            <div class="image-card">
+                                <img id="img-stress" src="" alt="Imagem da tensão de von Mises" class="w-full h-auto object-cover bg-gray-200">
+                                <p class="p-3 text-center font-semibold bg-gray-100">Tensão de von Mises</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                             <h4 class="text-xl font-semibold text-gray-700 mb-2">Análise do Resultado</h4>
+                             <p id="details-analysis" class="text-gray-600 leading-relaxed"></p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="conclusion" class="mt-12">
+                <h2 class="text-2xl font-bold text-gray-700 mb-4 text-center">Considerações e Conclusão Geral </h2>
+                 <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">Considerações:</h3>
+                    <ul class="list-disc list-inside space-y-2 text-gray-700 mb-3">
+                        <li><strong>Material:</strong> O material utilizado na análise não corresponde exatamente ao material de fabricação da peça, pois o mesmo não foi encontrado.</li>
+                        <li><strong>Simplificação do modelo:</strong> O modelo teve que reduzir a qualidade de renderização para conseguir realizar a simulação, o que pode causar pequenos desvios nos resultados.</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">Conclusão:</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        A análise por elementos finitos demonstrou que o gancho, conforme projetado, <strong>não suporta a carga de 75 kN</strong> em nenhuma das condições testadas, levando em conta o material da análise. Todos os cenários resultaram em tensões que ultrapassam o limite de escoamento do material (0.25 GPa), indicando que a falha por deformação plástica é iminente.
+                    </p>
+                    
+                 </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const reportData = {
+                '1': {
+                    description: 'Carga aplicada em uma área concentrada na base interna do gancho.',
+                    deformation: 1.8439,
+                    stress: 2.0099,
+                    analysis: 'A tensão máxima excedeu em mais de 8 vezes o limite de escoamento do material, indicando falha catastrófica imediata. Esta forma de carregamento é extremamente perigosa.',
+                    images: {
+                       load: 'https://i.imgur.com/GIiMLS3.png',
+                        deformation: 'https://i.imgur.com/80ipvXy.png',
+                        stress: 'https://i.imgur.com/onJjt6Z.png'
+
+                    }
+                },
+                '2': {
+                    description: 'Carga distribuída em uma área na curvatura principal interna do gancho.',
+                    deformation: 1.6881,
+                    stress: 0.7978,
+                    analysis: 'Embora tenha apresentado a menor tensão entre os cenários, o valor ainda é mais de 3 vezes superior ao limite de escoamento, resultando em falha estrutural.',
+                    images: {
+                        load: 'https://i.imgur.com/fN2S41C.png',
+                        deformation: 'https://i.imgur.com/FKUJ2T8.png',
+                        stress: 'https://i.imgur.com/iefp5dN.png'
+
+                    }
+                },
+                '3': {
+                    description: 'Carga distribuída em uma área deslocada para a ponta do gancho.',
+                    deformation: 0.9348,
+                    stress: 1.6011,
+                    analysis: 'A aplicação de carga na ponta também gera tensões críticas, superando o limite de escoamento em mais de 6 vezes. O risco de fratura é altíssimo.',
+                    images: {
+                        load: 'https://i.imgur.com/0hpTQZJ.png',
+                        deformation: 'https://i.imgur.com/bvnmFZT.png',
+                        stress: 'https://i.imgur.com/CdklTvb.png'
+
+                    }
+                },
+                '4': {
+                    description: 'Carga distribuída em uma área ampla na curvatura principal interna do gancho.',
+                    deformation: 7.2570,
+                    stress: 4.4133,
+                    analysis: 'Este cenário apresentou os piores resultados, com a maior deformação e uma tensão máxima quase 18 vezes maior que o limite de segurança do material.',
+                     images: {
+                                                load: 'https://i.imgur.com/mZ3AaeB.png',
+                        deformation: 'https://i.imgur.com/yus8HvI.png',
+                        stress: 'https://i.imgur.com/zS6wWqx.png'
+
+                    }
+                }
+            };
+
+            const yieldStrength = 0.25;
+            const scenarios = Object.keys(reportData);
+            const stressValues = scenarios.map(s => reportData[s].stress);
+            
+            const detailsTitle = document.getElementById('details-title');
+            const detailsPlaceholder = document.getElementById('details-placeholder');
+            const detailsBody = document.getElementById('details-body');
+            const detailsDescription = document.getElementById('details-description');
+            const detailsDeformation = document.getElementById('details-deformation');
+            const detailsStress = document.getElementById('details-stress');
+            const detailsAnalysis = document.getElementById('details-analysis');
+            const detailsContent = document.getElementById('details-content');
+            const imgLoad = document.getElementById('img-load');
+            const imgDeformation = document.getElementById('img-deformation');
+            const imgStress = document.getElementById('img-stress');
+
+            const scenarioCards = document.querySelectorAll('.scenario-card');
+            
+            let myChart;
+
+            function updateDetails(scenarioId) {
+                if (!reportData[scenarioId]) return;
+
+                const data = reportData[scenarioId];
+                
+                detailsContent.classList.remove('fade-in');
+                void detailsContent.offsetWidth; 
+                detailsContent.classList.add('fade-in');
+
+                detailsTitle.textContent = `Detalhes do Cenário ${scenarioId}`;
+                detailsPlaceholder.classList.add('hidden');
+                detailsBody.classList.remove('hidden');
+                
+                detailsDescription.textContent = data.description;
+                detailsDeformation.textContent = `${data.deformation.toFixed(4)} mm`;
+                detailsStress.textContent = `${data.stress.toFixed(4)} GPa`;
+                detailsAnalysis.textContent = data.analysis;
+                
+                imgLoad.src = data.images.load;
+                imgDeformation.src = data.images.deformation;
+                imgStress.src = data.images.stress;
+
+                scenarioCards.forEach(card => {
+                    card.classList.remove('selected');
+                    if (card.dataset.scenario === scenarioId) {
+                        card.classList.add('selected');
+                    }
+                });
+
+                updateChartHighlight(scenarioId);
+            }
+
+            function updateChartHighlight(scenarioId) {
+                if (!myChart) return;
+                const index = parseInt(scenarioId, 10) - 1;
+                myChart.data.datasets[0].backgroundColor = stressValues.map((_, i) => i === index ? '#2563eb' : '#93c5fd');
+                myChart.update();
+            }
+
+            scenarioCards.forEach(card => {
+                card.addEventListener('click', () => {
+                    const scenarioId = card.dataset.scenario;
+                    updateDetails(scenarioId);
+                    const detailsSection = document.getElementById('details');
+                    detailsSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+            });
+
+            const ctx = document.getElementById('stressChart').getContext('2d');
+            myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Cenário 1', 'Cenário 2', 'Cenário 3', 'Cenário 4'],
+                    datasets: [{
+                        label: 'Tensão Máxima (GPa)',
+                        data: stressValues,
+                        backgroundColor: '#93c5fd',
+                        borderColor: '#3b82f6',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Tensão Equivalente (GPa)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += `${context.parsed.y.toFixed(4)} GPa`;
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        annotation: {
+                            annotations: {
+                                line1: {
+                                    type: 'line',
+                                    yMin: yieldStrength,
+                                    yMax: yieldStrength,
+                                    borderColor: 'rgb(239, 68, 68)',
+                                    borderWidth: 2,
+                                    borderDash: [6, 6],
+                                    label: {
+                                        content: `Limite de Escoamento (${yieldStrength} GPa)`,
+                                        position: 'end',
+                                        backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                                        color: '#fff',
+                                        font: {
+                                            weight: 'bold'
+                                        },
+                                        display: true
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const scenarioId = elements[0].index + 1;
+                            updateDetails(scenarioId.toString());
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
